@@ -1,0 +1,47 @@
+{
+  "name": "ldss-client",
+  "version": "0.1.0",
+  "description": "Local Distributed Storage System - Store data in users' browsers with zero backend",
+  "main": "ldss-client.js",
+  "types": "ldss-client.d.ts",
+  "keywords": [
+    "storage",
+    "browser",
+    "indexeddb",
+    "local-storage",
+    "offline",
+    "database",
+    "client-side",
+    "distributed",
+    "experimental"
+  ],
+  "author": {
+    "name": "Daouda Abdoul Anzize",
+    "email": "anzizdaouda0@gmail.com",
+    "url": "https://github.com/Tryboy869"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tryboy869/ldss.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tryboy869/ldss/issues"
+  },
+  "homepage": "https://github.com/Tryboy869/ldss#readme",
+  "files": [
+    "ldss-client.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "scripts": {
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/sponsors/Tryboy869"
+  }
+}
