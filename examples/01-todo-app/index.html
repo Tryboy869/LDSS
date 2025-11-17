@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LDSS Todo App - Example 1</title>
+  <title>LDSS Todo App - Standalone Demo</title>
   <style>
     * {
       margin: 0;
@@ -180,68 +180,260 @@
       color: #667eea;
       text-decoration: none;
     }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #667eea;
+      font-size: 18px;
+    }
+
+    .error {
+      background: #f44336;
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>📝 LDSS Todo App</h1>
-    <p class="subtitle">Example 1 - Basic CRUD Operations</p>
+    <p class="subtitle">v0.1.0 - Standalone Demo</p>
 
-    <div class="input-group">
-      <input 
-        type="text" 
-        id="todoInput" 
-        placeholder="What needs to be done?"
-        onkeypress="if(event.key==='Enter') addTodo()"
-      >
-      <button onclick="addTodo()">Add Todo</button>
+    <div id="loadingState" class="loading">
+      🚀 Initializing LDSS...
     </div>
 
-    <div class="stats">
-      <span id="totalCount">Total: 0</span>
-      <span id="activeCount">Active: 0</span>
-      <span id="completedCount">Completed: 0</span>
-    </div>
+    <div id="errorState" style="display: none;"></div>
 
-    <ul class="todo-list" id="todoList">
-      <!-- Todos will be rendered here -->
-    </ul>
+    <div id="appContent" style="display: none;">
+      <div class="input-group">
+        <input 
+          type="text" 
+          id="todoInput" 
+          placeholder="What needs to be done?"
+          onkeypress="if(event.key==='Enter') addTodo()"
+        >
+        <button onclick="addTodo()">Add Todo</button>
+      </div>
+
+      <div class="stats">
+        <span id="totalCount">Total: 0</span>
+        <span id="activeCount">Active: 0</span>
+        <span id="completedCount">Completed: 0</span>
+      </div>
+
+      <ul class="todo-list" id="todoList"></ul>
+    </div>
 
     <div class="footer">
       Powered by <a href="https://github.com/Tryboy869/ldss" target="_blank">LDSS v0.1.0</a>
     </div>
   </div>
 
-  <script src="../../ldss-client.js"></script>
   <script>
-    let db;
-    let todos = [];
+    // ============================================
+    // LDSS SDK Embedded (v0.1.0)
+    // ============================================
+    class LDSS {
+      constructor(config) {
+        if (!config || !config.projectName) {
+          throw new Error('[LDSS] projectName is required');
+        }
+        this.projectName = config.projectName;
+        this.version = '0.1.0';
+        this.workers = {};
+        this.initialized = false;
+      }
 
-    // Initialize app
-    async function initApp() {
-      try {
-        console.log('🚀 Initializing LDSS Todo App...');
+      async init() {
+        if (this.initialized) return this;
+        console.log(`[LDSS v${this.version}] Initializing...`);
+
+        try {
+          this.workers.db = await this._initIndexedDB();
+          this.workers.search = await this._initSearch();
+          this.initialized = true;
+          console.log('✅ [LDSS] Initialized successfully');
+          return this;
+        } catch (error) {
+          console.error('❌ [LDSS] Init failed:', error);
+          throw error;
+        }
+      }
+
+      async store(collection, data) {
+        this._checkInitialized();
+        const id = data.id || this._generateId();
+        const record = { ...data, id, _createdAt: Date.now() };
+        await this.workers.db.store(collection, record);
         
-        db = new LDSS({ 
-          projectName: 'TodoApp-Example1' 
+        const searchText = this._extractSearchableText(record);
+        if (searchText) {
+          this.workers.search.index(collection, id, searchText);
+        }
+        
+        return { success: true, id };
+      }
+
+      async get(collection, id) {
+        this._checkInitialized();
+        return await this.workers.db.get(collection, id);
+      }
+
+      async getAll(collection) {
+        this._checkInitialized();
+        return (await this.workers.db.getAll(collection)) || [];
+      }
+
+      async delete(collection, id) {
+        this._checkInitialized();
+        await this.workers.db.delete(collection, id);
+        this.workers.search.remove(collection, id);
+        return { success: true };
+      }
+
+      _checkInitialized() {
+        if (!this.initialized) {
+          throw new Error('[LDSS] Not initialized. Call await db.init()');
+        }
+      }
+
+      _generateId() {
+        return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+
+      _extractSearchableText(record) {
+        const fields = ['title', 'name', 'text', 'content'];
+        return fields
+          .filter(f => record[f])
+          .map(f => record[f])
+          .join(' ')
+          .toLowerCase();
+      }
+
+      async _initIndexedDB() {
+        const dbName = `ldss_${this.projectName}`;
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(dbName, 1);
+          
+          request.onerror = () => reject(request.error);
+          
+          request.onsuccess = () => {
+            const db = request.result;
+            resolve({
+              db,
+              async store(collection, record) {
+                return new Promise((resolve, reject) => {
+                  try {
+                    const tx = db.transaction([collection], 'readwrite');
+                    const store = tx.objectStore(collection);
+                    const req = store.put(record);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                  } catch (e) {
+                    reject(e);
+                  }
+                });
+              },
+              async get(collection, id) {
+                return new Promise((resolve, reject) => {
+                  try {
+                    const tx = db.transaction([collection], 'readonly');
+                    const store = tx.objectStore(collection);
+                    const req = store.get(id);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                  } catch (e) {
+                    reject(e);
+                  }
+                });
+              },
+              async getAll(collection) {
+                return new Promise((resolve, reject) => {
+                  try {
+                    const tx = db.transaction([collection], 'readonly');
+                    const store = tx.objectStore(collection);
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                  } catch (e) {
+                    reject(e);
+                  }
+                });
+              },
+              async delete(collection, id) {
+                return new Promise((resolve, reject) => {
+                  try {
+                    const tx = db.transaction([collection], 'readwrite');
+                    const store = tx.objectStore(collection);
+                    const req = store.delete(id);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                  } catch (e) {
+                    reject(e);
+                  }
+                });
+              }
+            });
+          };
+          
+          request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            const collections = ['todos', 'notes', 'default'];
+            collections.forEach(name => {
+              if (!db.objectStoreNames.contains(name)) {
+                db.createObjectStore(name, { keyPath: 'id' });
+              }
+            });
+          };
         });
-        
-        await db.init();
-        console.log('✅ LDSS initialized');
-        
-        await loadTodos();
-        console.log('✅ Todos loaded');
-      } catch (error) {
-        console.error('❌ Initialization failed:', error);
-        alert('Failed to initialize app. Check console for details.');
+      }
+
+      async _initSearch() {
+        const index = new Map();
+        return {
+          index(collection, id, text) {
+            index.set(`${collection}:${id}`, { collection, id, text });
+          },
+          remove(collection, id) {
+            index.delete(`${collection}:${id}`);
+          }
+        };
       }
     }
 
-    // Add new todo
+    // ============================================
+    // TODO APP LOGIC
+    // ============================================
+    let db;
+    let todos = [];
+
+    async function initApp() {
+      try {
+        db = new LDSS({ projectName: 'TodoApp-Standalone' });
+        await db.init();
+        
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('appContent').style.display = 'block';
+        
+        await loadTodos();
+      } catch (error) {
+        console.error('Init failed:', error);
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('errorState').style.display = 'block';
+        document.getElementById('errorState').className = 'error';
+        document.getElementById('errorState').textContent = 
+          `Failed to initialize: ${error.message}. Check browser console.`;
+      }
+    }
+
     async function addTodo() {
       const input = document.getElementById('todoInput');
       const title = input.value.trim();
-
+      
       if (!title) {
         alert('Please enter a todo!');
         return;
@@ -249,73 +441,61 @@
 
       try {
         await db.store('todos', {
-          title: title,
+          title,
           completed: false,
           createdAt: Date.now()
         });
-
+        
         input.value = '';
         await loadTodos();
-        console.log('✅ Todo added:', title);
       } catch (error) {
-        console.error('❌ Failed to add todo:', error);
-        alert('Failed to add todo. Check console.');
+        console.error('Add todo failed:', error);
+        alert('Failed to add todo');
       }
     }
 
-    // Toggle todo completion
     async function toggleTodo(id) {
       try {
         const todo = todos.find(t => t.id === id);
         if (!todo) return;
-
-        // Delete and recreate with updated status
+        
         await db.delete('todos', id);
         await db.store('todos', {
           ...todo,
           completed: !todo.completed
         });
-
+        
         await loadTodos();
-        console.log('✅ Todo toggled:', id);
       } catch (error) {
-        console.error('❌ Failed to toggle todo:', error);
+        console.error('Toggle failed:', error);
       }
     }
 
-    // Delete todo
     async function deleteTodo(id) {
       if (!confirm('Delete this todo?')) return;
-
+      
       try {
         await db.delete('todos', id);
         await loadTodos();
-        console.log('✅ Todo deleted:', id);
       } catch (error) {
-        console.error('❌ Failed to delete todo:', error);
-        alert('Failed to delete todo. Check console.');
+        console.error('Delete failed:', error);
       }
     }
 
-    // Load all todos
     async function loadTodos() {
       try {
         todos = await db.getAll('todos');
-        
-        // Sort by creation date (newest first)
         todos.sort((a, b) => b.createdAt - a.createdAt);
-        
         renderTodos();
         updateStats();
       } catch (error) {
-        console.error('❌ Failed to load todos:', error);
+        console.error('Load failed:', error);
       }
     }
 
-    // Render todos to UI
     function renderTodos() {
       const list = document.getElementById('todoList');
-
+      
       if (todos.length === 0) {
         list.innerHTML = `
           <div class="empty-state">
@@ -347,18 +527,16 @@
       `).join('');
     }
 
-    // Update statistics
     function updateStats() {
       const total = todos.length;
       const completed = todos.filter(t => t.completed).length;
       const active = total - completed;
-
+      
       document.getElementById('totalCount').textContent = `Total: ${total}`;
       document.getElementById('activeCount').textContent = `Active: ${active}`;
       document.getElementById('completedCount').textContent = `Completed: ${completed}`;
     }
 
-    // Escape HTML to prevent XSS
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
