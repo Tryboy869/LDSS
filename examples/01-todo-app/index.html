@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LDSS Todo App - Example 1</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #667eea;
+      margin-bottom: 10px;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 30px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      padding: 15px 30px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #5568d3;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .stats {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .todo-list {
+      list-style: none;
+    }
+
+    .todo-item {
+      background: #f8f9fa;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: transform 0.2s;
+    }
+
+    .todo-item:hover {
+      transform: translateX(5px);
+    }
+
+    .todo-item.completed {
+      opacity: 0.6;
+    }
+
+    .todo-item.completed .todo-text {
+      text-decoration: line-through;
+    }
+
+    .todo-text {
+      flex: 1;
+      font-size: 16px;
+      color: #333;
+    }
+
+    .todo-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-small {
+      padding: 8px 15px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    .btn-complete {
+      background: #4caf50;
+      color: white;
+    }
+
+    .btn-complete:hover {
+      background: #45a049;
+    }
+
+    .btn-delete {
+      background: #f44336;
+      color: white;
+    }
+
+    .btn-delete:hover {
+      background: #da190b;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state-emoji {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+
+    .footer {
+      margin-top: 30px;
+      text-align: center;
+      color: #999;
+      font-size: 12px;
+    }
+
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📝 LDSS Todo App</h1>
+    <p class="subtitle">Example 1 - Basic CRUD Operations</p>
+
+    <div class="input-group">
+      <input 
+        type="text" 
+        id="todoInput" 
+        placeholder="What needs to be done?"
+        onkeypress="if(event.key==='Enter') addTodo()"
+      >
+      <button onclick="addTodo()">Add Todo</button>
+    </div>
+
+    <div class="stats">
+      <span id="totalCount">Total: 0</span>
+      <span id="activeCount">Active: 0</span>
+      <span id="completedCount">Completed: 0</span>
+    </div>
+
+    <ul class="todo-list" id="todoList">
+      <!-- Todos will be rendered here -->
+    </ul>
+
+    <div class="footer">
+      Powered by <a href="https://github.com/Tryboy869/ldss" target="_blank">LDSS v0.1.0</a>
+    </div>
+  </div>
+
+  <script src="../../ldss-client.js"></script>
+  <script>
+    let db;
+    let todos = [];
+
+    // Initialize app
+    async function initApp() {
+      try {
+        console.log('🚀 Initializing LDSS Todo App...');
+        
+        db = new LDSS({ 
+          projectName: 'TodoApp-Example1' 
+        });
+        
+        await db.init();
+        console.log('✅ LDSS initialized');
+        
+        await loadTodos();
+        console.log('✅ Todos loaded');
+      } catch (error) {
+        console.error('❌ Initialization failed:', error);
+        alert('Failed to initialize app. Check console for details.');
+      }
+    }
+
+    // Add new todo
+    async function addTodo() {
+      const input = document.getElementById('todoInput');
+      const title = input.value.trim();
+
+      if (!title) {
+        alert('Please enter a todo!');
+        return;
+      }
+
+      try {
+        await db.store('todos', {
+          title: title,
+          completed: false,
+          createdAt: Date.now()
+        });
+
+        input.value = '';
+        await loadTodos();
+        console.log('✅ Todo added:', title);
+      } catch (error) {
+        console.error('❌ Failed to add todo:', error);
+        alert('Failed to add todo. Check console.');
+      }
+    }
+
+    // Toggle todo completion
+    async function toggleTodo(id) {
+      try {
+        const todo = todos.find(t => t.id === id);
+        if (!todo) return;
+
+        // Delete and recreate with updated status
+        await db.delete('todos', id);
+        await db.store('todos', {
+          ...todo,
+          completed: !todo.completed
+        });
+
+        await loadTodos();
+        console.log('✅ Todo toggled:', id);
+      } catch (error) {
+        console.error('❌ Failed to toggle todo:', error);
+      }
+    }
+
+    // Delete todo
+    async function deleteTodo(id) {
+      if (!confirm('Delete this todo?')) return;
+
+      try {
+        await db.delete('todos', id);
+        await loadTodos();
+        console.log('✅ Todo deleted:', id);
+      } catch (error) {
+        console.error('❌ Failed to delete todo:', error);
+        alert('Failed to delete todo. Check console.');
+      }
+    }
+
+    // Load all todos
+    async function loadTodos() {
+      try {
+        todos = await db.getAll('todos');
+        
+        // Sort by creation date (newest first)
+        todos.sort((a, b) => b.createdAt - a.createdAt);
+        
+        renderTodos();
+        updateStats();
+      } catch (error) {
+        console.error('❌ Failed to load todos:', error);
+      }
+    }
+
+    // Render todos to UI
+    function renderTodos() {
+      const list = document.getElementById('todoList');
+
+      if (todos.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-emoji">🎉</div>
+            <p>No todos yet. Add one above!</p>
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = todos.map(todo => `
+        <li class="todo-item ${todo.completed ? 'completed' : ''}">
+          <span class="todo-text">${escapeHtml(todo.title)}</span>
+          <div class="todo-actions">
+            <button 
+              class="btn-small btn-complete" 
+              onclick="toggleTodo('${todo.id}')"
+            >
+              ${todo.completed ? '↩️ Undo' : '✓ Done'}
+            </button>
+            <button 
+              class="btn-small btn-delete" 
+              onclick="deleteTodo('${todo.id}')"
+            >
+              🗑️ Delete
+            </button>
+          </div>
+        </li>
+      `).join('');
+    }
+
+    // Update statistics
+    function updateStats() {
+      const total = todos.length;
+      const completed = todos.filter(t => t.completed).length;
+      const active = total - completed;
+
+      document.getElementById('totalCount').textContent = `Total: ${total}`;
+      document.getElementById('activeCount').textContent = `Active: ${active}`;
+      document.getElementById('completedCount').textContent = `Completed: ${completed}`;
+    }
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Start app
+    initApp();
+  </script>
+</body>
+</html>
